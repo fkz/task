@@ -33,23 +33,46 @@ import Control.Lens hiding ((.=))
 import Control.Applicative
 import Control.Concurrent.STM
 
-import qualified PersistentDatabase P
+import qualified PersistentDatabase as P
 
 --data Id = Id {identifier :: Int, pointer' :: Maybe (TVar SumObject)}
 
-type Database = Database SumObject
+data Proxy a = Proxy
+class (SafeCopy a, Typeable a) => Object a where
+  name :: Proxy a -> String
 
-pointer :: Database -> Id -> TVar SumObject
-pointer d i = case pointer' i of
-  Just x -> x
-  Nothing -> S.index (runDatabase d) (identifier i)
+data SumObject = forall a. Object a => SumObject a
+
+instance SafeCopy SumObject where
+  version = 1
+  getCopy = contains $ do
+    a <- safeGet :: String
+    r <- case a of
+      "def" -> safeGet 
+    return $ SumObject r
+  putCopy (SumObject m) = contains $ do
+    safePut $ name (Proxy :: m)
+    safePut m
+
+toSumObject :: Object a => a -> SumObject
+toSumObject = SumObject
+
+fromSumObject :: Object a => SumObject -> Maybe a
+fromSumObject (SumObject a) = cast a
+
+type Database = P.Database SumObject
+
+--pointer :: Database -> Id -> TVar SumObject
+--pointer d i = case pointer' i of
+--  Just x -> x
+--  Nothing -> S.index (runDatabase d) (identifier i)
 -- the convention is, that there will be only added elements at the end of the sequence 
-data Database = Database {runDatabase :: S.Seq (Maybe (TVar SumObject)) }
+--data Database = Database {runDatabase :: S.Seq (Maybe (TVar SumObject)) }
 
 newDatabase :: Maybe FilePath -> Database
-newDatabase _ = Database S.empty
+newDatabase = P.open . maybe "./" id
 
-insertDatabase :: Object a => a -> Database -> IO (Id, Database)
+{-insertDatabase :: Object a => a -> Database -> IO (Id, Database)
 insertDatabase a d = do
   obj <- atomically $ newTVar (SumObject a)
   let result = Database $ (runDatabase d) S.|> Just obj in
@@ -62,47 +85,42 @@ getDatabase d i = readTVar (pointer d i) >>= return . fromJust . fromSumObject
 updateDatabase :: Object a => Id -> a -> Database -> STM Database
 --updateDatabase (Id i) a d =  Database $ S.update i (toSumObject a) (runDatabase d)
 updateDatabase i a r = writeTVar (pointer r i) (toSumObject a) >> return r
+-}
 
-
-data Proxy a = Proxy
-class (SafeCopy a, Typeable a) => Object a where
-  name :: Proxy a -> String
 
 deriveObject :: Version a -> String -> TH.Name -> TH.Name -> TH.Q [TH.Dec]
 deriveObject a s b c = return concat `ap` sequence [deriveSafeCopy a b c, makeLenses c, 
                      [d| instance Object $(TH.conT c) where name _ = $(TH.litE (TH.stringL s)) |]] 
 
-data SumObject = forall a. Object a => SumObject a
 
-toSumObject :: Object a => a -> SumObject
-toSumObject = SumObject
+type St = P.DatabaseS SumObject
+newtype Ref a = Ref (P.Ref SumObject)
+--newtype St a = St (StateT Database IO a) deriving Monad
+--newtype Ref a = Ref {runRef :: Id}
 
-fromSumObject :: Object a => SumObject -> Maybe a
-fromSumObject (SumObject a) = cast a
-
-newtype St a = St (StateT Database IO a) deriving Monad
-newtype Ref a = Ref {runRef :: Id}
-
-instance SafeCopy Id where
-  version = 1
-  getCopy = contain (safeGet >>= return . flip Id Nothing) 
-  putCopy (Id a _) = contain (safePut a)
+--instance SafeCopy Id where
+--  version = 1
+--  getCopy = contain (safeGet >>= return . flip Id Nothing) 
+--  putCopy (Id a _) = contain (safePut a)
 
 --deriveSafeCopy 1 'base ''Id
 deriveSafeCopy 1 'base ''Ref
 
 new :: Object a => a -> St (Ref a)
+new a = P.new (SumObject a) 
+
+{-new :: Object a => a -> St (Ref a)
 new a = St $ do
   d <- SM.get
   (i,d') <- liftIO $ insertDatabase a d
   SM.put d'
-  return (Ref i)
+  return (Ref i) -}
 
-(.=) :: Object a => a -> Ref a ->  St ()
+{-(.=) :: Object a => a -> Ref a ->  St ()
 a .= (Ref r) = St $ do
   d <- SM.get
   s <- liftIO $ atomically (updateDatabase r a d)
-  SM.put s
+  SM.put s-}
 
 class Monad m => ReadObjects m where
   get :: Object a => Ref a -> m a
