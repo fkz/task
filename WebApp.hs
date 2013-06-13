@@ -6,7 +6,7 @@ import Snap.Snaplet.Heist
 import SnapletDatabase hiding (database)
 import Control.Lens
 import Text.Read
-import Database
+import Database hiding (new)
 import Text.XmlHtml
 import Html
 import Data.ByteString.Char8 as B
@@ -17,7 +17,7 @@ import Dialog
 data App = App {
   _heist :: Snaplet (Heist App),
   _database :: Snaplet SnapletDatabase,
-  _dialog :: Snaplet (Dialog IO)}
+  _dialog :: Snaplet (Dialog App)}
 
 makeLenses ''App
 
@@ -47,9 +47,10 @@ getById f = do
             Nothing -> return ()
             Just s -> do
                    t <- with database $ SnapletDatabase.get (f s)
-                   renderWithSplices "tmplte" [("content", return t)] 
+                   renderWithSplices "tmplte" [("contentD", return t)] 
  
 newObject :: Object a =>  HtmlGenerate a -> Handler App App ()
 newObject gen = method GET $ do
-                  
-                  with dialog $ makeDialog gen (const $ return ())
+                  lens <- getLens
+                  with dialog $ makeDialog gen $ 
+                       (>> return ()) . (with database . new)

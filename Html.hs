@@ -37,7 +37,7 @@ instance BasicGenerator HtmlGenerate where
   getByName a b = flip formData (Just . T.unpack) (\s -> 
     [Element "label" [] [TextNode (T.pack a),   
                       Element "input" [("name",s),("type","text"),("value",T.pack b)] []]])
-  
+  mistake s = HtmlGenerate 0 (const []) (const Nothing)
 
 data HtmlGenerateSnaplet b a = HtmlGenerateSnaplet {
   _heist :: Snaplet (Heist b) }
@@ -47,3 +47,6 @@ makeForm url key g = [Element "form" [("method","post"),("action",url)] (
                      Element "input" [("type","hidden"),("name","key"),("value",key)] [] : 
                      _content g (map (T.pack . ("t"++) . show) [1.._parameter g]) ++
                      [Element "input" [("type","submit"),("value","Abschicken")] []])]
+
+htmlCalculate :: HtmlGenerate a -> Request -> Maybe a
+htmlCalculate = undefined

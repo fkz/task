@@ -19,9 +19,9 @@ import System.Random.MWC
 
 type DialogManager m = M.Map B.ByteString (DialogData m)
 
-data DialogData m = forall obj. Object obj => DialogData { gen :: Generate HtmlGenerate obj, fun :: obj -> m () }
+data DialogData m = forall obj. Object obj => DialogData { gen :: HtmlGenerate obj, fun :: obj -> m () }
 
-data Dialog m = Dialog { _session :: MVar (DialogManager m), _rng :: RNG  }
+data Dialog m = Dialog { _session :: MVar (DialogManager (Handler  m m)), _rng :: RNG  }
 
 makeLenses ''Dialog
 
@@ -31,12 +31,12 @@ dialogInit = makeSnaplet "dialog" "a dialog applet" Nothing $ do
   rng <- liftIO mkRNG
   return $ Dialog sess rng 
 
-getRand :: Handler v (Dialog m) T.Text
+getRand :: Handler m (Dialog m) T.Text
 getRand = do
   (gets _rng >>= liftIO . flip withRNG (\a -> sequence $ take 18 $ repeat $ uniform a) >>= 
    return . decodeUtf8 . Base64.encode . B.pack)
 
-handleDialog :: Handler v (Dialog m) ()
+handleDialog :: Handler m (Dialog m) ()
 handleDialog = do
   a <- getPostParam "key"
   d <- gets _session
@@ -45,11 +45,22 @@ handleDialog = do
                                              case M.lookup key m of
                                                Nothing -> return (m, Nothing)
                                                Just r -> return ((M.delete key m), Just r))}  
-  maybe (writeBS "No valid request") (const $ writeBS "Succesfully received form") e
-
-makeDialog :: HasHeist v => HtmlGenerate a -> (a -> Handler v r ()) -> Handler v (Dialog m) ()
+  case e of
+    Nothing -> writeBS "no valid request (token not found)"
+    Just (DialogData o w) -> getRequest >>= \request -> 
+      case htmlCalculate o request of
+           Nothing -> writeBS "you made a mistake during the submitting, sorry"
+           Just m -> getRequest >>= \request -> withTop' id (w m)
+    
+    
+makeDialog :: (HasHeist m, Object a) => HtmlGenerate a -> (a -> Handler m m ()) -> Handler m (Dialog m) ()
 makeDialog gen fun = do
   url <- liftM (B.append "/") $  snapletURL ""
   prR <- getRand
+  
+  
+  
+  use session >>= liftIO . flip modifyMVar_ (return . M.insert (encodeUtf8 prR) (DialogData gen fun))  
+
   withSplices [("form", return $ makeForm (decodeUtf8 url) prR gen)]
     $ render "dialog"
