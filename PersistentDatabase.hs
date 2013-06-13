@@ -1,7 +1,23 @@
 {-# LANGUAGE TupleSections #-}
 
+module PersistentDatabase (
+  Ref,
+  LVar,
+  readLVar,
+  writeLVar,
+  DatabaseS,
+  Database,
+  Transform,
+  open,
+  getRef,
+  loadRef,  
+  new,
+  runDatabaseS
+  ) where
+
 import qualified Data.Map.Strict as M
 import Control.Concurrent.STM
+import Control.Concurrent
 import Control.Monad.Trans.Reader
 import Control.Monad.IO.Class
 import System.IO.Error
@@ -43,13 +59,15 @@ getFilename b = do
   fn <- asks path
   return (fn ++ show (ident b))
 
-open :: FilePath -> IO (Database b)
+open :: SafeCopy b => FilePath -> IO (Database b)
 open fp = do
   m <- newTVarIO M.empty
   s <- catchIOError (readFile (fp ++ "max")) (\e -> if isDoesNotExistError e then return "0" else ioError e)
   s' <- newTVarIO (read s)
   tc <- newTChanIO
-  return $ Database m fp s' tc
+  let result = Database m fp s' tc
+  forkIO (runDatabaseS result alwaysFlush)
+  return result
 
 getRef :: Int -> DatabaseS b (Maybe (Ref b))
 getRef i = do
@@ -63,6 +81,11 @@ loadFromFile f = do
   case runGet safeGet contents of 
     Left s -> fail s
     Right r -> return r
+
+writeToFile :: SafeCopy b => Ref b -> b -> DatabaseS b ()
+writeToFile f b = do
+  filename <- getFilename f
+  liftIO $ B.writeFile filename $ runPut (safePut b)
 
 loadRef :: SafeCopy b => (Ref b) -> DatabaseS b (LVar b)
 loadRef l@(Ref a (Just b)) = return $ LVar a b
@@ -101,9 +124,21 @@ new b = do
     writeTVar dtbse (M.insert ident (Just b') dtb)
     return lv
   
+-- flush the next item (might block until the next item becomes available)
+flush :: SafeCopy b => DatabaseS b ()
+flush = do
+  chan <- asks writeOut
+  (ident, value) <- liftIO $ atomically $ do
+    v <- readTChan chan
+    value <- readTVar (valueL v)
+    return (varToRef v, value)
+  writeToFile ident value
+
+alwaysFlush :: SafeCopy b => DatabaseS b ()
+alwaysFlush = PersistentDatabase.flush >> alwaysFlush
 
 varToRef :: LVar b -> Ref b
 varToRef (LVar a b) = Ref a (Just b)
 
-withDatabaseS :: Database b -> DatabaseS b s -> IO s
-withDatabaseS = flip runReaderT
+runDatabaseS :: Database b -> DatabaseS b s -> IO s
+runDatabaseS = flip runReaderT

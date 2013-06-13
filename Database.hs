@@ -40,7 +40,7 @@ pointer d i = case pointer' i of
   Just x -> x
   Nothing -> S.index (runDatabase d) (identifier i)
 -- the convention is, that there will be only added elements at the end of the sequence 
-data Database = Database {runDatabase :: S.Seq (TVar SumObject) }
+data Database = Database {runDatabase :: S.Seq (Maybe (TVar SumObject)) }
 
 newDatabase :: Maybe FilePath -> Database
 newDatabase _ = Database S.empty
@@ -48,7 +48,7 @@ newDatabase _ = Database S.empty
 insertDatabase :: Object a => a -> Database -> IO (Id, Database)
 insertDatabase a d = do
   obj <- atomically $ newTVar (SumObject a)
-  let result = Database $ (runDatabase d) S.|> obj in
+  let result = Database $ (runDatabase d) S.|> Just obj in
     return (Id (S.length (runDatabase d)) (Just obj), result)
 
 getDatabase :: Object a => Database -> Id -> STM a
@@ -102,7 +102,8 @@ a .= (Ref r) = St $ do
 
 class Monad m => ReadObjects m where
   get :: Object a => Ref a -> m a
-  
+
+
 instance ReadObjects St where
   get (Ref a) = St $ SM.gets (flip getDatabase a) >>= liftIO . atomically
 
