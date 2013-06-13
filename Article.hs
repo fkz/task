@@ -9,15 +9,15 @@ import Control.Monad
 import Generate
 import Control.Applicative
 import Control.Lens
+import Object
+import DeriveObject
 
 data Article = Article {
   _title:: String,
   _content:: String, 
   _next :: Maybe (Ref Article) } deriving Typeable
 
-
-
-deriveObject 1 "article" 'base ''Article
+deriveObject' 1 "article" 'base ''Article
 
 print :: LVar Article -> Property String
 print a = do

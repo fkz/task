@@ -9,6 +9,9 @@ import Snap
 import Snap.Snaplet.Heist
 import Control.Lens
 import Generate
+import qualified Data.ByteString as B
+import qualified Data.Map as M
+import Data.Text.Encoding
 
 data HtmlGenerate a = HtmlGenerate { _parameter :: Int, 
                                      _content :: [T.Text] -> [Node], 
@@ -49,4 +52,12 @@ makeForm url key g = [Element "form" [("method","post"),("action",url)] (
                      [Element "input" [("type","submit"),("value","Abschicken")] []])]
 
 htmlCalculate :: HtmlGenerate a -> Request -> Maybe a
-htmlCalculate = undefined
+htmlCalculate gen req = do
+   params <- sequence $ map getParam_ [1.._parameter gen]
+   _output gen (map decodeUtf8 params) 
+  where
+    params = rqPostParams req
+    singleton [] = Nothing
+    singleton [a] = Just a
+    singleton _ = Nothing
+    getParam_ i = M.lookup (encodeUtf8 $ T.pack $ "t"++show i) params >>= singleton

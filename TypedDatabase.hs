@@ -21,16 +21,15 @@ module TypedDatabase (
   runDatabaseS,
   getRef,
   open,
-  deriveObject)
+  name)
        where
 
 import qualified PersistentDatabase as P
 import Data.SafeCopy
 import Data.Typeable
 import Data.Serialize
-import qualified AllTypes
+import {-# SOURCE #-} qualified AllTypes
 import Object
-import qualified Language.Haskell.TH as TH  
 import Control.Lens
 import Control.Monad
 
@@ -44,9 +43,8 @@ instance SafeCopy SumObject where
     safePut $ name (Proxy m)
     safePut m
 
-deriveObject :: Version a -> String -> TH.Name -> TH.Name -> TH.Q [TH.Dec]
-deriveObject a s b c = return concat `ap` sequence [deriveSafeCopy a b c, makeLenses c, 
-                     [d| instance Object $(TH.conT c) where name _ = $(TH.litE (TH.stringL s)) |]] 
+--deriveObject :: String -> TH.Name -> TH.Q [TH.Dec]
+--deriveObject s c = [d| instance Object $(TH.conT c) where name _ = $(TH.litE (TH.stringL s)) |]
 
 
 toSumObject :: Object a => a -> SumObject

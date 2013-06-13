@@ -171,3 +171,5 @@ getByInt i = St $ do
     where
      ref :: a -> Id -> Ref a
      ref _ = Ref
+
+type Property = 
