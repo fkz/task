@@ -6,7 +6,7 @@ import Snap.Snaplet.Heist
 import SnapletDatabase hiding (database)
 import Control.Lens
 import Text.Read
-import Database hiding (new)
+import TypedDatabase hiding (new)
 import Text.XmlHtml
 import Html
 import Data.ByteString.Char8 as B
@@ -35,14 +35,14 @@ initApp = makeSnaplet "app" "the forward app" Nothing $ do
 
   return $ App hst dtbse dialg
 
-getById :: Object a => (Ref a -> Property [Node]) -> Handler App App ()
+getById :: Object a => (LVar a -> Property [Node]) -> Handler App App ()
 getById f = do
   id <- getParam "id"
   case (id >>= readMaybe . B.unpack) of
     Nothing -> return ()
     Just i -> 
         do
-          a <- with database $ SnapletDatabase.getByInt i
+          a <- with database $ SnapletDatabase.getByInt' i
           case a of
             Nothing -> return ()
             Just s -> do

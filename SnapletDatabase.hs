@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 
 module SnapletDatabase where
-import Database
+import TypedDatabase
 import Snap
 import Control.Concurrent.MVar
 import qualified Data.ByteString.Char8 as B
@@ -12,30 +12,38 @@ import Control.Lens
 import Data.Tuple
 
 data SnapletDatabase = SnapletDatabase {
-  _database :: MVar Database }
+  _database :: Database }
 
 makeLenses ''SnapletDatabase
 
 initSnapletDatabase = makeSnaplet "database" "the database backend" Nothing $ do 
                         config <- getSnapletUserConfig
                         st <- liftIO $ C.lookup config "storage" 
-                        db <- liftIO $ newMVar $ newDatabase st
+                        let loc = maybe "./" id st
+                        db <- liftIO $ open loc
+                        printInfo (T.pack $ "Using database at " ++ loc)
                         return $ SnapletDatabase db
-   
+
+runDatabase :: DatabaseS a -> Handler b SnapletDatabase a
+runDatabase a = do
+  db <- use database
+  liftIO $ runDatabaseS db a
 
 
 get :: Property a -> Handler b SnapletDatabase a
-get a = do
-  db <- liftIO . readMVar =<< use database
-  liftIO $ runProperty a db
+get = runDatabase . atomic
 
-liftSt :: St a -> Handler b SnapletDatabase a
-liftSt q = do
-  use database >>= liftIO . flip modifyMVar ((swap <$>) . runSt q)
 
-getByInt :: Object a => Int -> Handler b SnapletDatabase (Maybe (Ref a))
-getByInt i = liftSt $ Database.getByInt i
+--liftSt :: St a -> Handler b SnapletDatabase a
+--liftSt q = 
   
+  
+getByInt :: Object a => Int -> Handler b SnapletDatabase (Maybe (Ref a))
+getByInt = runDatabase . getRef
 
-new :: Object a => a -> Handler b SnapletDatabase (Ref a)
-new = liftSt . Database.new
+getByInt' :: Object a => Int -> Handler b SnapletDatabase (Maybe (LVar a))
+getByInt' i = runDatabase $ do
+  getRef i >>= maybe (return Nothing) (\a -> getVar a >>= return . Just) 
+
+new :: Object a => a -> Handler b SnapletDatabase (LVar a)
+new = runDatabase . TypedDatabase.new

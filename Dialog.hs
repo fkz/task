@@ -6,7 +6,7 @@ import Control.Concurrent.MVar
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.ByteString as B
-import Database
+import TypedDatabase
 import Html
 import Data.Text.Encoding
 import Control.Lens

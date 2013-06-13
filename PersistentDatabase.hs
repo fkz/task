@@ -34,6 +34,11 @@ data Database b = Database {loadedData :: TVar (M.Map Int (Maybe (TVar b))), pat
 
 data Ref b = Ref { ident :: Int, value :: Maybe (TVar b) }
 
+instance SafeCopy (Ref b) where
+  version = 1
+  getCopy = contain (safeGet >>= return . flip Ref Nothing)
+  putCopy a = contain (safePut (ident a))
+
 type DatabaseS b = ReaderT (Database b) IO
 
 data LVar b = LVar { identL :: Int, valueL :: TVar b }

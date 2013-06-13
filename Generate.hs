@@ -1,6 +1,5 @@
 module Generate where
 
-import Database
 import Control.Applicative
 
 class Applicative m => BasicGenerator m where
