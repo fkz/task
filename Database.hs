@@ -33,7 +33,11 @@ import Control.Lens hiding ((.=))
 import Control.Applicative
 import Control.Concurrent.STM
 
-data Id = Id {identifier :: Int, pointer' :: Maybe (TVar SumObject)}
+import qualified PersistentDatabase P
+
+--data Id = Id {identifier :: Int, pointer' :: Maybe (TVar SumObject)}
+
+type Database = Database SumObject
 
 pointer :: Database -> Id -> TVar SumObject
 pointer d i = case pointer' i of

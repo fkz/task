@@ -8,9 +8,12 @@ module PersistentDatabase (
   DatabaseS,
   Database,
   Transform,
+  atomic,
   open,
   getRef,
-  loadRef,  
+  loadRef,
+  refToInt,
+  varToRef,
   new,
   runDatabaseS
   ) where
@@ -27,7 +30,7 @@ import Data.Serialize
 import qualified Data.List as L
 
 -- a database which saves objects of type b
-data Database b = Database {loadedData :: TVar (M.Map Int (Maybe (TVar b))), path :: FilePath, maxV :: TVar Int, writeOut :: TChan (LVar b) }
+data Database b = Database {loadedData :: TVar (M.Map Int (Maybe (TVar b))), path :: FilePath, maxV :: TVar Int, writeOut :: TChan (Either (LVar b) Int) }
 
 data Ref b = Ref { ident :: Int, value :: Maybe (TVar b) }
 
@@ -53,11 +56,23 @@ instance Monad (Transform b) where
       (a,vars) <- runTransform d
       (b,vars2) <- runTransform (g a)
       return (b,vars ++ vars2)
-      
+
+atomic :: Transform b a -> DatabaseS b a
+atomic t = do
+  chan <- asks writeOut
+  liftIO $ atomically $ do
+    (res,pipe) <- runTransform t
+    sequence $ map (writeTChan chan . Left) pipe
+    return res
+
 getFilename :: Ref b -> DatabaseS b FilePath
 getFilename b = do
   fn <- asks path
   return (fn ++ show (ident b))
+
+getMaxFilename = do
+  fn <- asks path
+  return (fn ++ "max")
 
 open :: SafeCopy b => FilePath -> IO (Database b)
 open fp = do
@@ -74,6 +89,9 @@ getRef i = do
   (asks maxV >>= \b -> liftIO $ atomically $ readTVar b >>= return . ( > i))
     >>= \a -> return $ if a then Just (Ref i Nothing) else Nothing
 
+refToInt :: Ref b -> Int
+refToInt (Ref a _) = a
+
 loadFromFile :: SafeCopy b => Ref b -> DatabaseS b b
 loadFromFile f = do
   filename <- getFilename f
@@ -86,6 +104,11 @@ writeToFile :: SafeCopy b => Ref b -> b -> DatabaseS b ()
 writeToFile f b = do
   filename <- getFilename f
   liftIO $ B.writeFile filename $ runPut (safePut b)
+
+writeNumberToFile :: Int -> DatabaseS b ()
+writeNumberToFile i = do
+  filename <- getMaxFilename
+  liftIO $ writeFile filename (show i)
 
 loadRef :: SafeCopy b => (Ref b) -> DatabaseS b (LVar b)
 loadRef l@(Ref a (Just b)) = return $ LVar a b
@@ -114,13 +137,15 @@ new b = do
     m <- readTVar maxR
     writeTVar maxR (m+1)
     return m
+  
   dtbse <- asks loadedData
   chan <- asks writeOut
   liftIO $ atomically $ do
     dtb <- readTVar dtbse
     b' <- newTVar b
     let lv = LVar ident b'
-    writeTChan chan lv
+    writeTChan chan (Left lv)
+    writeTChan chan (Right (ident+1))
     writeTVar dtbse (M.insert ident (Just b') dtb)
     return lv
   
@@ -128,12 +153,18 @@ new b = do
 flush :: SafeCopy b => DatabaseS b ()
 flush = do
   chan <- asks writeOut
-  (ident, value) <- liftIO $ atomically $ do
-    v <- readTChan chan
-    value <- readTVar (valueL v)
-    return (varToRef v, value)
-  writeToFile ident value
+  s <- liftIO $ atomically $ do
+    v' <- readTChan chan
+    case v' of
+      Left v -> do
+        value <- readTVar (valueL v)
+        return $ Left (varToRef v, value)
+      Right i -> return $ Right i
+  case s of
+    Left (ident, value) -> writeToFile ident value
+    Right i -> writeNumberToFile i
 
+      
 alwaysFlush :: SafeCopy b => DatabaseS b ()
 alwaysFlush = PersistentDatabase.flush >> alwaysFlush
 
