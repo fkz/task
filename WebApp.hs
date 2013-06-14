@@ -13,6 +13,9 @@ import Data.ByteString.Char8 as B
 import Data.Text as T
 import qualified Article
 import Dialog
+import HtmlTemplates
+import Text.Blaze.Html
+import Text.Blaze.Html.Renderer.Utf8
 
 data App = App {
   _heist :: Snaplet (Heist App),
@@ -29,13 +32,13 @@ initApp = makeSnaplet "app" "the forward app" Nothing $ do
   dtbse <- nestSnaplet "database" database $ initSnapletDatabase
   dialg <- nestSnaplet "dialog" dialog $ dialogInit
 
-  addRoutes [("article/:id", getById (\h -> Article.print h >>= return . (:[]) . TextNode . T.pack)),
+  addRoutes [("article/:id", getById (\h -> Article.print h >>= return . toHtml)),
              ("new-article", newObject Article.generate)]
   
 
   return $ App hst dtbse dialg
 
-getById :: Object a => (LVar a -> Property [Node]) -> Handler App App ()
+getById :: Object a => (LVar a -> Property Html) -> Handler App App ()
 getById f = do
   id <- getParam "id"
   case (id >>= readMaybe . B.unpack) of
@@ -47,7 +50,7 @@ getById f = do
             Nothing -> return ()
             Just s -> do
                    t <- with database $ SnapletDatabase.get (f s)
-                   renderWithSplices "tmplte" [("contentD", return t)] 
+                   writeLBS $ renderHtml $ tmplte t 
  
 newObject :: Object a =>  HtmlGenerate a -> Handler App App ()
 newObject gen = method GET $ do

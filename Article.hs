@@ -13,11 +13,16 @@ import Object
 import DeriveObject
 
 data Article = Article {
-  _title:: String,
-  _content:: String, 
+  _title :: String,
+  _content :: String, 
   _next :: Maybe (Ref Article) } deriving Typeable
 
+data Category = Category {
+  _name :: String,
+  _context :: String } deriving Typeable
+
 deriveObject' 1 "article" 'base ''Article
+deriveObject' 1 "category" 'base ''Category
 
 print :: LVar Article -> Property String
 print a = do

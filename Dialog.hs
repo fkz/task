@@ -15,7 +15,8 @@ import Snap.Snaplet
 import Snap.Snaplet.Heist
 import qualified Data.ByteString.Base64 as Base64
 import System.Random.MWC
-
+import HtmlTemplates
+import Text.Blaze.Html.Renderer.Utf8
 
 type DialogManager m = M.Map B.ByteString (DialogData m)
 
@@ -57,10 +58,8 @@ makeDialog :: (HasHeist m, Object a) => HtmlGenerate a -> (a -> Handler m m ()) 
 makeDialog gen fun = do
   url <- liftM (B.append "/") $  snapletURL ""
   prR <- getRand
-  
-  
-  
+
   use session >>= liftIO . flip modifyMVar_ (return . M.insert (encodeUtf8 prR) (DialogData gen fun))  
 
-  withSplices [("form", return $ makeForm (decodeUtf8 url) prR gen)]
-    $ render "dialog"
+  writeLBS $ renderHtml $ formula $ makeForm (decodeUtf8 url) prR gen
+   
